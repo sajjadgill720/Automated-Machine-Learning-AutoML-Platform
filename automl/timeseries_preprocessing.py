@@ -184,15 +184,7 @@ def preprocess_timeseries(df: pd.DataFrame,
     else:
         y = None
     
-    # Scale features
-    logger.info(f"\n⚖️  Scaling Features:")
-    logger.info(f"  • Using StandardScaler (mean=0, std=1)")
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_df)
-    
     feature_names = X_df.columns.tolist()
-    logger.info(f"✓ Scaled {len(feature_names)} features")
-    
     # Split into train/val/test sets (preserving temporal order)
     logger.info(f"\n✂️  Temporal Splitting:")
     logger.info(f"  • Test size: {test_size*100}%")
@@ -203,9 +195,17 @@ def preprocess_timeseries(df: pd.DataFrame,
     test_start_idx = int(n_samples * (1 - test_size))
     val_start_idx = int(test_start_idx * (1 - val_size / (1 - test_size)))
     
-    X_train = X_scaled[:val_start_idx]
-    X_val = X_scaled[val_start_idx:test_start_idx]
-    X_test = X_scaled[test_start_idx:]
+    X_train_raw = X_df.iloc[:val_start_idx].to_numpy()
+    X_val_raw = X_df.iloc[val_start_idx:test_start_idx].to_numpy()
+    X_test_raw = X_df.iloc[test_start_idx:].to_numpy()
+
+    # Scale features after split to avoid leakage
+    logger.info(f"\n⚖️  Scaling Features:")
+    logger.info(f"  • Using StandardScaler (fit on train, transform val/test)")
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train_raw)
+    X_val = scaler.transform(X_val_raw)
+    X_test = scaler.transform(X_test_raw)
     
     if y is not None:
         y_train = y[:val_start_idx]
