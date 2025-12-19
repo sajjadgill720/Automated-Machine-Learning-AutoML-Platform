@@ -15,7 +15,8 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
+from threading import Thread
 
 import pandas as pd
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -48,6 +49,33 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 RESULTS_DIR.mkdir(exist_ok=True)
 
 
+def _sanitize_tuned_model(tuned_model: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Strip non-serializable objects from tuned_model payload."""
+
+    if tuned_model is None:
+        return None
+
+    tuned_estimator = tuned_model.get("tuned_model") if isinstance(tuned_model, dict) else None
+    model_name = type(tuned_estimator).__name__ if tuned_estimator is not None else None
+
+    return {
+        "model_name": model_name,
+        "best_params": tuned_model.get("best_params") if isinstance(tuned_model, dict) else None,
+        "best_score": tuned_model.get("best_score") if isinstance(tuned_model, dict) else None,
+    }
+
+
+def _safe_list(value: Any) -> Optional[list]:
+    """Convert array-like to list for JSON serialization."""
+
+    if value is None:
+        return None
+    try:
+        return list(value)
+    except Exception:
+        return None
+
+
 # Request models
 class RunPipelineRequest(BaseModel):
     """Request model for running AutoML pipeline."""
@@ -64,6 +92,8 @@ class PipelineResult(BaseModel):
     """Response model for pipeline results."""
     job_id: str
     status: str
+    stage: Optional[str] = None
+    progress: Optional[int] = None
     best_model: Optional[str] = None
     metrics: Optional[dict] = None
     selected_features: Optional[list] = None
@@ -112,95 +142,163 @@ async def upload_csv(file: UploadFile = File(...)):
 # Run pipeline
 @app.post("/api/run", response_model=PipelineResult)
 def run_automl_pipeline(request: RunPipelineRequest):
-    """Run the AutoML pipeline on uploaded dataset.
-    
-    Args:
-        request: Pipeline configuration
-        
-    Returns:
-        PipelineResult: Job ID and initial status (processing starts async)
-    """
+    """Run the AutoML pipeline asynchronously and return a job id."""
+
     job_id = str(uuid.uuid4())
     csv_path = UPLOAD_DIR / request.filename
-    
-    # Validate file exists
+
+    # Validate file exists before queuing
     if not csv_path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {request.filename}")
-    
+
+    request_data = request.dict()
+
+    # Kick off background job
+    thread = Thread(target=_run_pipeline_job, args=(job_id, request_data), daemon=True)
+    thread.start()
+
+    # Initial response indicates processing
+    return PipelineResult(
+        job_id=job_id,
+        status="processing",
+        stage="queued",
+        progress=0,
+    )
+
+
+def _write_status(job_id: str, payload: Dict[str, Any]) -> None:
+    """Persist job status/result to disk in a JSON-safe way."""
+
+    payload_with_meta = {"job_id": job_id, **payload}
+    payload_with_meta.setdefault("timestamp", datetime.now().isoformat())
+    result_path = RESULTS_DIR / f"{job_id}.json"
+    with open(result_path, "w") as f:
+        json.dump(payload_with_meta, f, indent=2)
+
+
+def _run_pipeline_job(job_id: str, request_data: Dict[str, Any]) -> None:
+    """Execute pipeline work in background and stream progress to status file."""
+
+    csv_path = UPLOAD_DIR / request_data["filename"]
+
+    # Initial status
+    _write_status(job_id, {
+        "status": "processing",
+        "stage": "queued",
+        "progress": 0,
+        "request": request_data,
+    })
+
     try:
-        # Load dataset
+        if not csv_path.exists():
+            raise FileNotFoundError(f"File not found: {request_data['filename']}")
+
+        _write_status(job_id, {
+            "status": "processing",
+            "stage": "loading_dataset",
+            "progress": 5,
+            "request": request_data,
+        })
+
         df = pd.read_csv(csv_path)
-        
-        # Validate target column
-        if request.target_column not in df.columns:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Target column '{request.target_column}' not found. Available: {list(df.columns)}"
+
+        if request_data["target_column"] not in df.columns:
+            raise ValueError(
+                f"Target column '{request_data['target_column']}' not found. Available: {list(df.columns)}"
             )
-        
-        # Run pipeline
-        preprocessing_params = {}
-        if request.data_type_override:
-            preprocessing_params["data_type_override"] = request.data_type_override
-            
-        hyperparameter_params = {"search_method": request.search_method}
-        
+
+        preprocessing_params: Dict[str, Any] = {}
+        if request_data.get("data_type_override"):
+            preprocessing_params["data_type_override"] = request_data["data_type_override"]
+
+        hyperparameter_params: Dict[str, Any] = {"search_method": request_data.get("search_method", "grid")}
+
+        _write_status(job_id, {
+            "status": "processing",
+            "stage": "running_pipeline",
+            "progress": 20,
+            "request": request_data,
+        })
+
         results = run_pipeline(
             dataset=df,
-            target_column=request.target_column,
-            task_type=request.task_type,
-            feature_selection_enabled=request.feature_selection_enabled,
-            hyperparameter_tuning_enabled=request.hyperparameter_tuning_enabled,
+            target_column=request_data["target_column"],
+            task_type=request_data["task_type"],
+            feature_selection_enabled=request_data.get("feature_selection_enabled", True),
+            hyperparameter_tuning_enabled=request_data.get("hyperparameter_tuning_enabled", True),
             preprocessing_params=preprocessing_params,
             hyperparameter_params=hyperparameter_params,
         )
-        
-        # Extract summary
+
         best_model_name = results["best_model"]["name"]
         evaluation_results = results["evaluation_results"]
         best_metrics = evaluation_results[best_model_name].get("metrics", {})
-        
-        # Save results
-        result_path = RESULTS_DIR / f"{job_id}.json"
-        with open(result_path, "w") as f:
-            json.dump({
-                "job_id": job_id,
-                "timestamp": datetime.now().isoformat(),
-                "request": request.dict(),
-                "results": {
-                    "best_model": best_model_name,
-                    "metrics": best_metrics,
-                    "selected_features": results.get("selected_features"),
-                    "trained_models": list(results["trained_models"].keys()),
-                    "tuned_model": results.get("tuned_model")
-                }
-            }, f, indent=2)
-        
-        return PipelineResult(
-            job_id=job_id,
-            status="completed",
-            best_model=best_model_name,
-            metrics=best_metrics,
-            selected_features=results.get("selected_features"),
-            trained_models=list(results["trained_models"].keys())
-        )
-        
+        tuned_serialized = _sanitize_tuned_model(results.get("tuned_model"))
+        selected_features = _safe_list(results.get("selected_features"))
+
+        result_payload = {
+            "status": "completed",
+            "stage": "completed",
+            "progress": 100,
+            "request": request_data,
+            "results": {
+                "best_model": best_model_name,
+                "metrics": best_metrics,
+                "selected_features": selected_features,
+                "trained_models": list(results["trained_models"].keys()),
+                "tuned_model": tuned_serialized,
+            },
+        }
+
+        _write_status(job_id, result_payload)
+
     except Exception as e:
-        # Save error
-        result_path = RESULTS_DIR / f"{job_id}.json"
-        with open(result_path, "w") as f:
-            json.dump({
-                "job_id": job_id,
-                "timestamp": datetime.now().isoformat(),
-                "status": "error",
-                "error": str(e)
-            }, f, indent=2)
-        
+        _write_status(job_id, {
+            "status": "error",
+            "stage": "failed",
+            "progress": 100,
+            "error": str(e),
+            "request": request_data,
+        })
+
+
+# Get job status (compatible with frontend polling)
+@app.get("/api/status/{job_id}", response_model=PipelineResult)
+def get_status(job_id: str):
+    """Return job status; uses saved result file if present."""
+
+    result_path = RESULTS_DIR / f"{job_id}.json"
+
+    if not result_path.exists():
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+
+    with open(result_path, "r") as f:
+        data = json.load(f)
+
+    status = data.get("status", "completed" if data.get("results") else "processing")
+    stage = data.get("stage")
+    progress = data.get("progress")
+
+    if status == "error":
         return PipelineResult(
             job_id=job_id,
             status="error",
-            error=str(e)
+            stage=stage,
+            progress=progress,
+            error=data.get("error")
         )
+
+    results_data = data.get("results", {})
+    return PipelineResult(
+        job_id=job_id,
+        status=status,
+        stage=stage,
+        progress=progress,
+        best_model=results_data.get("best_model"),
+        metrics=results_data.get("metrics"),
+        selected_features=results_data.get("selected_features"),
+        trained_models=results_data.get("trained_models"),
+    )
 
 
 # Get results
@@ -226,6 +324,8 @@ def get_results(job_id: str):
         return PipelineResult(
             job_id=job_id,
             status="error",
+            stage=data.get("stage"),
+            progress=data.get("progress"),
             error=data.get("error")
         )
     
@@ -233,6 +333,8 @@ def get_results(job_id: str):
     return PipelineResult(
         job_id=job_id,
         status="completed",
+        stage=data.get("stage"),
+        progress=data.get("progress"),
         best_model=results_data.get("best_model"),
         metrics=results_data.get("metrics"),
         selected_features=results_data.get("selected_features"),

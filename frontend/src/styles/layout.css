@@ -1,0 +1,134 @@
+/**
+ * Layout Styles
+ * Styles for the main layout and page structure
+ */
+
+.layout-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #f9fafb;
+}
+
+.app-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+
+  .logo-icon {
+    animation: bounce 1.5s infinite;
+  }
+
+  .app-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.main-content {
+  flex: 1;
+  padding: 2rem 0;
+}
+
+.app-footer {
+  margin-top: auto;
+  padding: 2rem;
+  border-top: 1px solid #e5e7eb;
+  background-color: #ffffff;
+  text-align: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .app-header {
+    margin-bottom: 1rem;
+  }
+
+  .app-header .app-title {
+    font-size: 1.2rem;
+  }
+
+  .main-content {
+    padding: 1rem 0;
+  }
+}
+
+/* Status indicators */
+.status-success {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.status-error {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.status-warning {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.status-info {
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: all 0.3s ease;
+  cursor: pointer;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  }
+}
+
+/* Badge styles */
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+
+  &.badge-primary {
+    background-color: #dbeafe;
+    color: #1e40af;
+  }
+
+  &.badge-success {
+    background-color: #dcfce7;
+    color: #15803d;
+  }
+
+  &.badge-error {
+    background-color: #fee2e2;
+    color: #991b1b;
+  }
+}
+
+/* Loading state */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}

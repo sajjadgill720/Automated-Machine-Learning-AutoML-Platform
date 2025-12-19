@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional
 
 import pandas as pd
 
+from automl.utils.sampling import sample_dataset
 from automl.pipeline import run_pipeline
 
 
@@ -40,6 +41,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--target", type=str, default=None, help="Target column name (ignored for built-in)")
     parser.add_argument("--task", type=str, required=False, default=None, choices=["classification", "regression"], help="Task type")
     parser.add_argument("--data-type", type=str, required=False, default=None, choices=["tabular", "text", "image", "timeseries"], help="Override data type detection")
+    parser.add_argument("--max-sample-rows", type=int, default=5000, help="Maximum rows to sample; set to 0 to disable")
     parser.add_argument("--no-feature-selection", action="store_true", help="Disable feature selection")
     parser.add_argument("--no-tuning", action="store_true", help="Disable hyperparameter tuning")
     parser.add_argument("--search-method", type=str, default="grid", choices=["grid", "random", "bayesian"], help="Tuning search method")
@@ -91,6 +93,19 @@ def main(argv: Optional[list[str]] = None) -> int:
             else:
                 print("No dataset selected. Exiting.")
                 return 0
+
+        if args.max_sample_rows > 0:
+            sampled_df = sample_dataset(
+                df=dataset_df,
+                target_col=target_col,
+                max_rows=args.max_sample_rows,
+                task_type=task_type,
+            )
+            if len(sampled_df) != len(dataset_df):
+                print(f"Sampling dataset to {len(sampled_df)} rows (from {len(dataset_df)})")
+            dataset_df = sampled_df
+        else:
+            print("Sampling disabled (max_sample_rows <= 0)")
 
         print(f"Target column: {target_col}")
         print(f"Task type: {task_type}")
