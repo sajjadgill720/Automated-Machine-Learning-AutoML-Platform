@@ -168,15 +168,28 @@ def preprocess_tabular(df: pd.DataFrame,
     logger.info(f"  • Validation size: {val_size*100}%")
     
     if y is not None:
+        # Detect if this is classification or regression
+        n_unique = len(np.unique(y))
+        is_int_dtype = np.issubdtype(y.dtype, np.integer)
+        
+        # Classification: < 20 unique values AND integer dtype (or small unique set)
+        is_classification = n_unique < 20 and is_int_dtype
+        
+        stratify_param = y if is_classification else None
+        
+        logger.info(f"  • Task type: {'Classification' if is_classification else 'Regression'}")
+        if is_classification:
+            logger.info(f"  • Classes: {np.unique(y)}")
+        
         # First split: train+val and test
         X_temp, X_test, y_temp, y_test = train_test_split(
-            X_scaled, y, test_size=test_size, random_state=random_state, stratify=y
+            X_scaled, y, test_size=test_size, random_state=random_state, stratify=stratify_param
         )
         
         # Second split: train and val
         val_size_adjusted = val_size / (1 - test_size)
         X_train, X_val, y_train, y_val = train_test_split(
-            X_temp, y_temp, test_size=val_size_adjusted, random_state=random_state, stratify=y_temp
+            X_temp, y_temp, test_size=val_size_adjusted, random_state=random_state, stratify=y_temp if is_classification else None
         )
         
         logger.info(f"\n✓ Split Complete:")

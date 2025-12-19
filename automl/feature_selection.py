@@ -112,10 +112,22 @@ def _is_classification(y: np.ndarray) -> bool:
 
 
 def _variance_threshold_select(X: np.ndarray, threshold: float) -> List[int]:
-	selector = VarianceThreshold(threshold=threshold)
-	selector.fit(X)
-	idx = list(np.where(selector.get_support())[0])
-	return idx if idx else list(range(X.shape[1]))
+	# Try with provided threshold, fallback to lower thresholds for sparse data
+	thresholds_to_try = [threshold, threshold * 0.1, threshold * 0.01, 0.0]
+	
+	for thresh in thresholds_to_try:
+		try:
+			selector = VarianceThreshold(threshold=thresh)
+			selector.fit(X)
+			idx = list(np.where(selector.get_support())[0])
+			if idx:  # Found features meeting threshold
+				return idx
+		except ValueError:
+			# No features meet threshold, try lower
+			continue
+	
+	# If all thresholds fail, return all features
+	return list(range(X.shape[1]))
 
 
 def _default_estimator(y: np.ndarray) -> Any:

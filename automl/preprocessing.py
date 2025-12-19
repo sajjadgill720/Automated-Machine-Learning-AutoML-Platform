@@ -125,7 +125,7 @@ def preprocess_data(data: Union[pd.DataFrame, List],
         
         if not isinstance(data, pd.DataFrame):
             raise ValueError("Text data must be a pandas DataFrame")
-        text_col = kwargs.get('text_col', None)
+        text_col = kwargs.pop('text_col', None)
         if text_col is None:
             raise ValueError("text_col must be specified for text data")
         return preprocess_text(data, text_col, target_col, **kwargs)

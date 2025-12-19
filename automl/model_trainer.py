@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover - environment dependent
 	tf = None
 
 
-def train_models(X_train: Any, y_train: Any, data_type: str) -> Dict[str, Any]:
+def train_models(X_train: Any, y_train: Any, data_type: str, task_type: str = "classification") -> Dict[str, Any]:
 	"""Dispatch to the appropriate trainer based on data type.
 
 	Parameters
@@ -33,6 +33,8 @@ def train_models(X_train: Any, y_train: Any, data_type: str) -> Dict[str, Any]:
 		Training labels or targets.
 	data_type : str
 		One of "tabular", "text", "image", or "timeseries" (case-insensitive).
+	task_type : str, default="classification"
+		One of "classification" or "regression".
 
 	Returns
 	-------
@@ -48,7 +50,7 @@ def train_models(X_train: Any, y_train: Any, data_type: str) -> Dict[str, Any]:
 	normalized_type = data_type.strip().lower()
 
 	if normalized_type == "tabular":
-		return train_tabular_models(X_train, y_train)
+		return train_tabular_models(X_train, y_train, task_type)
 	if normalized_type == "text":
 		return train_text_models(X_train, y_train)
 	if normalized_type == "image":
@@ -59,42 +61,78 @@ def train_models(X_train: Any, y_train: Any, data_type: str) -> Dict[str, Any]:
 	raise ValueError(f"Unsupported data_type '{data_type}'. Expected one of: tabular, text, image, timeseries.")
 
 
-def train_tabular_models(X_train: Any, y_train: Any) -> Dict[str, Any]:
-	"""Train a suite of baseline tabular classifiers."""
+def train_tabular_models(X_train: Any, y_train: Any, task_type: str = "classification") -> Dict[str, Any]:
+	"""Train a suite of baseline tabular classifiers or regressors."""
 
 	models: Dict[str, Any] = {}
+	normalized_task = task_type.strip().lower()
+	
+	if normalized_task == "regression":
+		# Train regressors
+		from sklearn.ensemble import GradientBoostingRegressor
+		from sklearn.tree import DecisionTreeRegressor
+		from sklearn.neighbors import KNeighborsRegressor
+		from sklearn.svm import SVR
+		
+		print("Training tabular model: LinearRegression")
+		lr = LinearRegression()
+		lr.fit(X_train, y_train)
+		models["linear_regression"] = lr
 
-	print("Training tabular model: LogisticRegression")
-	lr_clf = LogisticRegression(max_iter=1000)
-	lr_clf.fit(X_train, y_train)
-	models["logistic_regression"] = lr_clf
+		print("Training tabular model: DecisionTreeRegressor")
+		dt = DecisionTreeRegressor(random_state=42)
+		dt.fit(X_train, y_train)
+		models["decision_tree"] = dt
 
-	print("Training tabular model: DecisionTreeClassifier")
-	dt_clf = DecisionTreeClassifier(random_state=42)
-	dt_clf.fit(X_train, y_train)
-	models["decision_tree"] = dt_clf
+		print("Training tabular model: RandomForestRegressor")
+		rf = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1)
+		rf.fit(X_train, y_train)
+		models["random_forest"] = rf
 
-	print("Training tabular model: RandomForestClassifier")
-	rf_clf = RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1)
-	rf_clf.fit(X_train, y_train)
-	models["random_forest"] = rf_clf
+		print("Training tabular model: GradientBoostingRegressor")
+		gb = GradientBoostingRegressor(random_state=42)
+		gb.fit(X_train, y_train)
+		models["gradient_boosting"] = gb
 
-	print("Training tabular model: SVC")
-	svc_clf = SVC(probability=True)
-	svc_clf.fit(X_train, y_train)
-	models["svc"] = svc_clf
+		print("Training tabular model: KNeighborsRegressor")
+		knn = KNeighborsRegressor()
+		knn.fit(X_train, y_train)
+		models["knn"] = knn
+		return models
+	
+	else:
+		# Train classifiers (default)
+		print("Training tabular model: LogisticRegression")
+		lr_clf = LogisticRegression(max_iter=1000)
+		lr_clf.fit(X_train, y_train)
+		models["logistic_regression"] = lr_clf
 
-	print("Training tabular model: KNeighborsClassifier")
-	knn_clf = KNeighborsClassifier()
-	knn_clf.fit(X_train, y_train)
-	models["knn"] = knn_clf
+		print("Training tabular model: DecisionTreeClassifier")
+		dt_clf = DecisionTreeClassifier(random_state=42)
+		dt_clf.fit(X_train, y_train)
+		models["decision_tree"] = dt_clf
 
-	print("Training tabular model: GradientBoostingClassifier")
-	gbc_clf = GradientBoostingClassifier(random_state=42)
-	gbc_clf.fit(X_train, y_train)
-	models["gradient_boosting"] = gbc_clf
+		print("Training tabular model: RandomForestClassifier")
+		rf_clf = RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1)
+		rf_clf.fit(X_train, y_train)
+		models["random_forest"] = rf_clf
 
-	return models
+		print("Training tabular model: SVC")
+		svc_clf = SVC(probability=True)
+		svc_clf.fit(X_train, y_train)
+		models["svc"] = svc_clf
+
+		print("Training tabular model: KNeighborsClassifier")
+		knn_clf = KNeighborsClassifier()
+		knn_clf.fit(X_train, y_train)
+		models["knn"] = knn_clf
+
+		print("Training tabular model: GradientBoostingClassifier")
+		gbc_clf = GradientBoostingClassifier(random_state=42)
+		gbc_clf.fit(X_train, y_train)
+		models["gradient_boosting"] = gbc_clf
+
+		return models
 
 
 def train_text_models(X_train: Any, y_train: Any) -> Dict[str, Any]:

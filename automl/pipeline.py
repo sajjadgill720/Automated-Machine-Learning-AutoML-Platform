@@ -100,7 +100,7 @@ def run_pipeline(
 
 	# 5) Train multiple baseline models
 	print("Training baseline models...")
-	trained_models = train_models(X_train, y_train, data_type)
+	trained_models = train_models(X_train, y_train, data_type, task_type)
 
 	# 6) Evaluate models
 	print("Evaluating models...")
