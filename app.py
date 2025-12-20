@@ -17,13 +17,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 from threading import Thread
+import io
 
 import pandas as pd
+import joblib
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
 from automl.pipeline import run_pipeline
+from automl.utils.sampling import sample_dataset
 
 
 # FastAPI app
@@ -86,6 +90,7 @@ class RunPipelineRequest(BaseModel):
     hyperparameter_tuning_enabled: bool = True
     search_method: str = "grid"  # "grid", "random", "bayesian"
     data_type_override: Optional[str] = None  # "tabular", "text", "timeseries", "image"
+    max_sample_rows: int = 10000  # Maximum rows to process; set to 0 to disable sampling
 
 
 class PipelineResult(BaseModel):
@@ -207,6 +212,31 @@ def _run_pipeline_job(job_id: str, request_data: Dict[str, Any]) -> None:
                 f"Target column '{request_data['target_column']}' not found. Available: {list(df.columns)}"
             )
 
+        # Apply sampling if enabled
+        max_sample_rows = request_data.get("max_sample_rows", 10000)
+        original_rows = len(df)
+        
+        if max_sample_rows > 0 and original_rows > max_sample_rows:
+            _write_status(job_id, {
+                "status": "processing",
+                "stage": "sampling_dataset",
+                "progress": 10,
+                "request": request_data,
+                "message": f"Sampling {original_rows} rows down to {max_sample_rows}"
+            })
+            
+            df = sample_dataset(
+                df=df,
+                target_col=request_data["target_column"],
+                max_rows=max_sample_rows,
+                task_type=request_data["task_type"],
+            )
+            print(f"Sampled dataset from {original_rows} to {len(df)} rows")
+        elif max_sample_rows <= 0:
+            print(f"Sampling disabled - processing all {original_rows} rows")
+        else:
+            print(f"Dataset size ({original_rows} rows) within limit - no sampling needed")
+
         preprocessing_params: Dict[str, Any] = {}
         if request_data.get("data_type_override"):
             preprocessing_params["data_type_override"] = request_data["data_type_override"]
@@ -216,9 +246,13 @@ def _run_pipeline_job(job_id: str, request_data: Dict[str, Any]) -> None:
         _write_status(job_id, {
             "status": "processing",
             "stage": "running_pipeline",
-            "progress": 20,
+            "progress": 25,
             "request": request_data,
         })
+
+        # Create job output directory
+        job_output_dir = RESULTS_DIR / job_id
+        job_output_dir.mkdir(parents=True, exist_ok=True)
 
         results = run_pipeline(
             dataset=df,
@@ -228,6 +262,8 @@ def _run_pipeline_job(job_id: str, request_data: Dict[str, Any]) -> None:
             hyperparameter_tuning_enabled=request_data.get("hyperparameter_tuning_enabled", True),
             preprocessing_params=preprocessing_params,
             hyperparameter_params=hyperparameter_params,
+            job_id=job_id,
+            model_output_dir=job_output_dir,
         )
 
         best_model_name = results["best_model"]["name"]
@@ -235,6 +271,14 @@ def _run_pipeline_job(job_id: str, request_data: Dict[str, Any]) -> None:
         best_metrics = evaluation_results[best_model_name].get("metrics", {})
         tuned_serialized = _sanitize_tuned_model(results.get("tuned_model"))
         selected_features = _safe_list(results.get("selected_features"))
+        
+        # Convert evaluation_results for JSON serialization
+        serialized_eval_results = {}
+        for model_name, eval_data in evaluation_results.items():
+            serialized_eval_results[model_name] = {
+                "metrics": eval_data.get("metrics", {}),
+                # Skip confusion_matrix in evaluation_results (already in main results)
+            }
 
         result_payload = {
             "status": "completed",
@@ -247,6 +291,10 @@ def _run_pipeline_job(job_id: str, request_data: Dict[str, Any]) -> None:
                 "selected_features": selected_features,
                 "trained_models": list(results["trained_models"].keys()),
                 "tuned_model": tuned_serialized,
+                "confusion_matrix": results.get("confusion_matrix"),
+                "feature_importance": results.get("feature_importance"),
+                "evaluation_results": serialized_eval_results,
+                "model_artifact_path": results.get("model_artifact_path"),
             },
         }
 
@@ -339,6 +387,116 @@ def get_results(job_id: str):
         metrics=results_data.get("metrics"),
         selected_features=results_data.get("selected_features"),
         trained_models=results_data.get("trained_models")
+    )
+
+
+# Export endpoints
+@app.get("/api/export/{job_id}/json")
+def export_json(job_id: str):
+    """Export job results as JSON."""
+    result_path = RESULTS_DIR / f"{job_id}.json"
+    if not result_path.exists():
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+    
+    with open(result_path, "r") as f:
+        data = json.load(f)
+    
+    return Response(
+        content=json.dumps(data, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename=automl-{job_id}.json"}
+    )
+
+
+@app.get("/api/export/{job_id}/csv")
+def export_csv(job_id: str):
+    """Export metrics comparison as CSV."""
+    result_path = RESULTS_DIR / f"{job_id}.json"
+    if not result_path.exists():
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+    
+    with open(result_path, "r") as f:
+        data = json.load(f)
+    
+    # Extract evaluation results
+    results = data.get("results", {})
+    evaluation_results = results.get("evaluation_results", {})
+    
+    # Build metrics table
+    metrics_data = []
+    for model_name, result in evaluation_results.items():
+        row = {"model": model_name}
+        row.update(result.get("metrics", {}))
+        metrics_data.append(row)
+    
+    if not metrics_data:
+        raise HTTPException(status_code=404, detail="No evaluation metrics found")
+    
+    df = pd.DataFrame(metrics_data)
+    csv_buffer = io.StringIO()
+    df.to_csv(csv_buffer, index=False)
+    
+    return Response(
+        content=csv_buffer.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=automl-metrics-{job_id}.csv"}
+    )
+
+
+@app.get("/api/export/{job_id}/model")
+def export_model(job_id: str):
+    """Download trained model artifact."""
+    job_dir = RESULTS_DIR / job_id
+    model_path = job_dir / "best_model.pkl"
+    
+    if not model_path.exists():
+        raise HTTPException(status_code=404, detail="Model artifact not found")
+    
+    def iter_file():
+        with open(model_path, "rb") as f:
+            yield from f
+    
+    return StreamingResponse(
+        iter_file(),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename=automl-model-{job_id}.pkl"}
+    )
+
+
+@app.get("/api/export/{job_id}/report")
+def export_report(job_id: str):
+    """Generate and download a PDF report (stub for now)."""
+    result_path = RESULTS_DIR / f"{job_id}.json"
+    if not result_path.exists():
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+    
+    with open(result_path, "r") as f:
+        data = json.load(f)
+    
+    # For now, return a simple text report; replace with PDF generation
+    report_content = f"""AutoML Report
+================
+Job ID: {job_id}
+Timestamp: {data.get('timestamp', 'N/A')}
+
+Configuration:
+--------------
+Dataset: {data.get('request', {}).get('filename', 'N/A')}
+Task Type: {data.get('request', {}).get('task_type', 'N/A')}
+Target Column: {data.get('request', {}).get('target_column', 'N/A')}
+
+Results:
+--------
+Best Model: {data.get('results', {}).get('best_model', 'N/A')}
+Metrics: {json.dumps(data.get('results', {}).get('metrics', {}), indent=2)}
+
+This is a simplified report. Full PDF generation coming soon.
+"""
+    
+    return Response(
+        content=report_content,
+        media_type="text/plain",
+        headers={"Content-Disposition": f"attachment; filename=automl-report-{job_id}.txt"}
     )
 
 

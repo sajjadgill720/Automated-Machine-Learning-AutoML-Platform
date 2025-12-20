@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 import pandas as pd
+import numpy as np
+import joblib
+from pathlib import Path
 
 from .preprocessing import preprocess_data
 from .feature_selection import select_features
@@ -26,6 +29,8 @@ def run_pipeline(
 	preprocessing_params: Optional[Dict[str, Any]] = None,
 	model_training_params: Optional[Dict[str, Any]] = None,
 	hyperparameter_params: Optional[Dict[str, Any]] = None,
+	job_id: Optional[str] = None,
+	model_output_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
 	"""Run the end-to-end AutoML pipeline.
 
@@ -123,12 +128,55 @@ def run_pipeline(
 
 	print("==== AutoML Pipeline: Done ====")
 
+	# Extract confusion matrix from best model evaluation
+	confusion_matrix_data = None
+	if task_type == "classification":
+		best_eval = evaluation_results.get(best_model_name, {})
+		cm_array = best_eval.get("confusion_matrix")
+		if cm_array is not None:
+			# Get unique labels from y_test
+			unique_labels = sorted(set(y_test))
+			confusion_matrix_data = {
+				"matrix": cm_array.tolist() if hasattr(cm_array, "tolist") else cm_array,
+				"labels": [str(label) for label in unique_labels]
+			}
+
+	# Extract feature importance if available
+	feature_importance_data = None
+	if hasattr(best_model_object, "feature_importances_"):
+		importances = best_model_object.feature_importances_
+		if feature_names and len(feature_names) == len(importances):
+			indices = np.argsort(importances)[::-1]
+			feature_importance_data = [
+				{"feature": feature_names[i], "importance": float(importances[i])}
+				for i in indices
+			]
+		elif selected_features and len(selected_features) == len(importances):
+			indices = np.argsort(importances)[::-1]
+			feature_importance_data = [
+				{"feature": selected_features[i], "importance": float(importances[i])}
+				for i in indices
+			]
+
+	# Save best model artifact if output directory provided
+	model_artifact_path = None
+	if model_output_dir and job_id:
+		model_output_dir.mkdir(parents=True, exist_ok=True)
+		model_path = model_output_dir / "best_model.pkl"
+		# Use protocol=4 for better compatibility across Python versions (3.4+)
+		joblib.dump(best_model_object, model_path, protocol=4)
+		model_artifact_path = str(model_path)
+		print(f"Saved model artifact to: {model_artifact_path}")
+
 	return {
 		"trained_models": trained_models,
 		"evaluation_results": evaluation_results,
 		"best_model": {"name": best_model_name, "object": best_model_object},
 		"tuned_model": tuned_model_result,
 		"selected_features": selected_features,
+		"confusion_matrix": confusion_matrix_data,
+		"feature_importance": feature_importance_data,
+		"model_artifact_path": model_artifact_path,
 	}
 
 

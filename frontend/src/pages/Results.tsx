@@ -34,6 +34,11 @@ import {
   FeatureImportance,
   LoadingSkeleton,
   ChartLoadingSkeleton,
+  MetricsBarChart,
+  ConfusionMatrixChart,
+  FeatureImportanceChart,
+  ExportActions,
+  InterpretationPanel,
 } from '@components/index'
 
 export const Results: React.FC = () => {
@@ -197,6 +202,18 @@ export const Results: React.FC = () => {
             ✓ AutoML pipeline completed successfully! Processing took {elapsedTime}.
           </Alert>
 
+          {/* Interpretation Panel */}
+          {jobResult.metrics && jobResult.best_model && (
+            <Box sx={{ mb: 4 }}>
+              <InterpretationPanel
+                bestModel={jobResult.best_model}
+                metrics={jobResult.metrics}
+                taskType={config.task_type}
+                topFeatures={jobResult.feature_importance?.slice(0, 3)}
+              />
+            </Box>
+          )}
+
           {/* Best Model Section */}
           <Grid container spacing={3} sx={{ mb: 4 }}>
             <Grid item xs={12} md={6}>
@@ -279,6 +296,19 @@ export const Results: React.FC = () => {
             </Card>
           )}
 
+          {/* Metrics Comparison Chart */}
+          {jobResult.evaluation_results && (
+            <Box sx={{ mb: 4 }}>
+              <MetricsBarChart
+                data={Object.entries(jobResult.evaluation_results).map(([model, result]) => ({
+                  model,
+                  ...result.metrics,
+                }))}
+                taskType={config.task_type}
+              />
+            </Box>
+          )}
+
           {/* Models Trained */}
           {jobResult.trained_models && jobResult.trained_models.length > 0 && (
             <Card sx={{ mb: 4 }}>
@@ -319,19 +349,24 @@ export const Results: React.FC = () => {
             </Card>
           )}
 
-          {/* Download Results */}
-          <Paper sx={{ p: 3, backgroundColor: '#f5f5f5', textAlign: 'center', mb: 4 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 2 }}>
-              📥 Export Results
-            </Typography>
-            <Button
-              variant="contained"
-              startIcon={<Download size={20} />}
-              onClick={() => setDownloadDialogOpen(true)}
-            >
-              Download Results (JSON)
-            </Button>
-          </Paper>
+          {/* Confusion Matrix Chart */}
+          {config.task_type === 'classification' && jobResult.confusion_matrix && (
+            <Box sx={{ mb: 4 }}>
+              <ConfusionMatrixChart data={jobResult.confusion_matrix} />
+            </Box>
+          )}
+
+          {/* Feature Importance Chart */}
+          {jobResult.feature_importance && jobResult.feature_importance.length > 0 && (
+            <Box sx={{ mb: 4 }}>
+              <FeatureImportanceChart data={jobResult.feature_importance} />
+            </Box>
+          )}
+
+          {/* Export Results */}
+          <Box sx={{ mb: 4 }}>
+            <ExportActions jobId={currentJobId} />
+          </Box>
 
           {/* CTA Buttons */}
           <Stack direction="row" spacing={2} sx={{ justifyContent: 'center' }}>

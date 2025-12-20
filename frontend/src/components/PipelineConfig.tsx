@@ -20,6 +20,8 @@ import {
   Paper,
   Alert,
   Grid,
+  TextField,
+  Tooltip,
 } from '@mui/material'
 import { Info } from 'lucide-react'
 import { useAutoMLStore } from '@store/automlStore'
@@ -46,6 +48,51 @@ export const PipelineConfig: React.FC<PipelineConfigProps> = ({ onNext, onBack }
                 Configure advanced options for AutoML processing.
               </Typography>
             </Box>
+
+            {/* Feature Selection */}
+            <Paper sx={{ p: 2.5, backgroundColor: '#fafafa', borderRadius: 1, border: '1px solid #e0e0e0' }}>
+              <Stack spacing={2}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Info size={20} color="#1976d2" />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                    Dataset Sampling
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="body2" gutterBottom>
+                    Maximum rows to process
+                  </Typography>
+                  <TextField
+                    type="number"
+                    fullWidth
+                    size="small"
+                    value={config.max_sample_rows || 10000}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value) || 0
+                      updateConfig({ max_sample_rows: value })
+                    }}
+                    inputProps={{ min: 0, step: 1000 }}
+                    helperText={
+                      <Box component="span">
+                        {config.max_sample_rows === 0 || !config.max_sample_rows ? (
+                          <span style={{ color: '#d32f2f' }}>
+                            ⚠️ No limit - will process all rows (may be slow for large datasets)
+                          </span>
+                        ) : (
+                          <span>
+                            Large datasets will be sampled to {config.max_sample_rows?.toLocaleString()} rows.
+                            Set to 0 to disable sampling.
+                          </span>
+                        )}
+                      </Box>
+                    }
+                  />
+                  <Typography variant="caption" color="textSecondary" sx={{ mt: 1, display: 'block' }}>
+                    Recommended: 5,000-10,000 for faster processing. Use 50,000+ for more accuracy.
+                  </Typography>
+                </Box>
+              </Stack>
+            </Paper>
 
             {/* Feature Selection */}
             <Paper sx={{ p: 2.5, backgroundColor: '#fafafa', borderRadius: 1, border: '1px solid #e0e0e0' }}>
@@ -156,12 +203,22 @@ export const PipelineConfig: React.FC<PipelineConfigProps> = ({ onNext, onBack }
               <Grid container spacing={1}>
                 <Grid item xs={6} sm={6}>
                   <Typography variant="caption" color="textSecondary">
+                    Max Rows:
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                    {config.max_sample_rows === 0 || !config.max_sample_rows 
+                      ? 'Unlimited' 
+                      : config.max_sample_rows.toLocaleString()}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6} sm={6}>
+                  <Typography variant="caption" color="textSecondary">
                     Feature Selection:
                   </Typography>
                   <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
                     {config.feature_selection_enabled ? '✓ Enabled' : '✗ Disabled'}
                   </Typography>
-                </Grid>
+                </Grid>6
                 <Grid item xs={6} sm={6}>
                   <Typography variant="caption" color="textSecondary">
                     Hyperparameter Tuning:

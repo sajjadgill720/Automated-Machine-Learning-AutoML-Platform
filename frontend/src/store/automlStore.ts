@@ -53,6 +53,7 @@ const defaultConfig: AutoMLConfig = {
   feature_selection_enabled: true,
   hyperparameter_tuning_enabled: true,
   search_method: 'grid',
+  max_sample_rows: 10000,  // Default sampling to 10k rows for performance
 }
 
 export const useAutoMLStore = create<AutoMLState>((set) => ({

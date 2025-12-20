@@ -30,6 +30,7 @@ export interface AutoMLConfig {
   hyperparameter_tuning_enabled: boolean
   search_method: SearchMethod
   data_type_override?: DataTypeOverride
+  max_sample_rows?: number  // Maximum rows to process; 0 to disable sampling
 }
 
 // Pipeline execution types
@@ -41,6 +42,7 @@ export interface RunPipelineRequest {
   hyperparameter_tuning_enabled: boolean
   search_method: SearchMethod
   data_type_override?: DataTypeOverride
+  max_sample_rows?: number  // Maximum rows to process; 0 to disable sampling (default: 10000)
 }
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'error'
@@ -54,6 +56,9 @@ export interface PipelineResult {
   metrics?: MetricsObject
   selected_features?: string[]
   trained_models?: string[]
+  confusion_matrix?: ConfusionMatrixData
+  feature_importance?: FeatureImportanceData[]
+  evaluation_results?: Record<string, { metrics: MetricsObject }>
   error?: string
   timestamp?: string
 }
