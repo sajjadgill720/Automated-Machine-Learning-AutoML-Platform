@@ -15,11 +15,12 @@ interface ExportActionsProps {
 export const ExportActions: React.FC<ExportActionsProps> = ({ jobId }) => {
   const { enqueueSnackbar } = useSnackbar()
   const [loading, setLoading] = useState<string | null>(null)
+  const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '/api'
 
   const handleDownload = async (format: string, endpoint: string, filename: string) => {
     setLoading(format)
     try {
-      const response = await fetch(`/api/export/${jobId}/${endpoint}`)
+      const response = await fetch(`${API_BASE}/export/${jobId}/${endpoint}`)
       
       if (!response.ok) {
         throw new Error(`Download failed: ${response.statusText}`)

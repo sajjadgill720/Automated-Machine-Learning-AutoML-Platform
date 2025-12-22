@@ -300,6 +300,11 @@ AutoML_System/
 
 ## 🔌 API Endpoints
 
+Base URL (Production):
+```
+https://automated-machine-learning-automl-platform-production.up.railway.app
+```
+
 ### Upload Dataset
 ```http
 POST /api/upload

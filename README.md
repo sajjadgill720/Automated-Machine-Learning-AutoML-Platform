@@ -9,6 +9,7 @@ Professional automated machine learning platform with comprehensive model persis
 - **Architecture**: See [Architecture](#architecture)
 - **Deployment**: See [Deployment Guide](#deployment-guide)
 - **Feature Documentation**: See [Features](#features)
+- **Production Backend**: https://automated-machine-learning-automl-platform-production.up.railway.app
 
 ---
 
@@ -314,6 +315,8 @@ Response:
 ```
 
 See full API docs at: http://localhost:8000/docs
+
+Production API docs: https://automated-machine-learning-automl-platform-production.up.railway.app/docs
 
 ---
 

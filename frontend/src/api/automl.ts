@@ -19,7 +19,7 @@ import {
  */
 class AutoMLAPIService {
   private client: AxiosInstance
-  private readonly baseURL = '/api'
+  private readonly baseURL = (import.meta as any).env?.VITE_API_BASE_URL || '/api'
   private readonly requestTimeout = 300000 // 5 minutes for long-running operations
 
   constructor() {
