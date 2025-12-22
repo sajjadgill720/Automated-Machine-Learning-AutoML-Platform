@@ -1,0 +1,7 @@
+# Optional heavy dependencies for deep learning features.
+# Not installed by default in production (Railway) to avoid large images
+# and dependency conflicts. Install locally only if you need DL pipelines.
+
+tensorflow==2.13.0
+torch==2.0.1
+torchvision==0.15.2
