@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scalable AutoML System Report</title>
+    <style>
+        /* --- 1. Reset & Variables --- */
+        :root {
+            --primary-color: #2563eb; /* Royal Blue */
+            --accent-color: #1e40af;
+            --text-main: #1f2937;
+            --text-light: #4b5563;
+            --bg-body: #f3f4f6;
+            --bg-card: #ffffff;
+            --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* --- 2. Body & Typography --- */
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            padding: 2rem 1rem;
+        }
+
+        h1, h2, h3 {
+            color: #111827;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            margin-top: 2rem;
+            line-height: 1.3;
+        }
+
+        h1 {
+            font-size: 2.25rem;
+            text-align: center;
+            color: var(--primary-color);
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            border-left: 5px solid var(--primary-color);
+            padding-left: 1rem;
+            margin-top: 3rem;
+        }
+
+        h3 {
+            font-size: 1.25rem;
+            color: var(--text-light);
+            margin-top: 1.5rem;
+        }
+
+        p, li {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            color: var(--text-main);
+        }
+
+        hr {
+            border: 0;
+            height: 1px;
+            background: #e5e7eb;
+            margin: 2.5rem 0;
+        }
+
+        /* --- 3. Layout Container --- */
+        .container {
+            max-width: 900px; /* Prevents text from stretching too wide on desktop */
+            margin: 0 auto;
+            background-color: var(--bg-card);
+            padding: 3rem 4rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* --- 4. Special Elements --- */
+        
+        /* STUDENT SECTION STYLING (NEW) */
+        .student-section {
+            display: flex;
+            justify-content: center;
+            align-items: stretch;
+            background-color: #f8fafc; /* Very light slate */
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 2rem 0;
+            gap: 2rem;
+        }
+
+        .student-card {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        /* The vertical divider line between students */
+        .student-card:first-child {
+            border-right: 1px solid #cbd5e1;
+            padding-right: 2rem;
+        }
+        
+        /* Reset the inline style you had on the second card via CSS */
+        .student-card:last-child {
+            border-left: none;
+            padding-left: 2rem; /* Matches the padding-right of the first child */
+        }
+
+        .student-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em; /* Spaced out letters */
+            color: var(--primary-color);
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .student-name {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 0.5rem;
+        }
+
+        .student-cms {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: #4b5563;
+            background-color: #e5e7eb;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-weight: 500;
+        }
+
+        /* Lists */
+        ul, ol {
+            margin-left: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Blockquotes */
+        blockquote {
+            background-color: #f9fafb;
+            border-left: 4px solid var(--primary-color);
+            padding: 1rem 1.5rem;
+            margin: 1.5rem 0;
+            font-style: italic;
+            border-radius: 0 8px 8px 0;
+        }
+
+        /* Code Blocks */
+        pre {
+            background-color: #1f2937;
+            color: #e5e7eb;
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            margin: 1.5rem 0;
+            border: 1px solid #374151;
+        }
+        
+        code {
+            font-family: var(--font-mono);
+        }
+
+        p code {
+            background-color: #f3f4f6;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            color: #c2410c; /* Burnt orange for inline code distinction */
+            font-size: 0.9em;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 2rem 0;
+            font-size: 0.95rem;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        th {
+            background-color: #f3f4f6;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        tr:hover {
+            background-color: #f9fafb;
+        }
+
+        /* --- 5. Responsiveness --- */
+        @media (max-width: 768px) {
+            .container {
+                padding: 2rem 1.5rem;
+                width: 100%;
+                border-radius: 0;
+                box-shadow: none;
+            }
+
+            body {
+                padding: 0;
+            }
+
+            h1 { font-size: 1.75rem; }
+            h2 { font-size: 1.35rem; }
+
+            /* Student Section Mobile Stack */
+            .student-section {
+                flex-direction: column;
+                gap: 1.5rem;
+                padding: 1.5rem;
+            }
+
+            .student-card:first-child {
+                border-right: none;
+                border-bottom: 1px solid #e2e8f0;
+                padding-right: 0;
+                padding-bottom: 1.5rem;
+            }
+
+            .student-card:last-child {
+                padding-left: 0;
+            }
+
+            /* Allow tables to scroll horizontally on mobile */
+            .table-wrapper {
+                overflow-x: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <main class="container">
+        <h1 id="-scalable-automl-system-with-intelligent-sampling-">Scalable AutoML System with Intelligent Sampling</h1>
+        <p style="text-align: center; color: #6b7280; font-weight: 500; margin-top: -1.5rem; margin-bottom: 2rem;">A Production-Grade Automated Machine Learning Framework</p>
+        
+        <div class="student-section">
+            <div class="student-card">
+                <span class="student-label">Group Member 1</span>
+                <span class="student-name">Sajjad Ur Rehman</span>
+                <span class="student-cms">CMS ID: 460525</span>
+            </div>
+            
+            <div class="student-card">
+                <span class="student-label">Group Member 2</span>
+                <span class="student-name">Nafeel Mannan</span>
+                <span class="student-cms">CMS ID: 455323</span>
+            </div>
+        </div> 
+        <hr>
+
+        <h2 id="-1-executive-summary-">1. Executive Summary</h2>
+        <p>This project presents a <strong>scalable, modular, and industry-aligned Automated Machine Learning (AutoML) system</strong> designed to efficiently handle <strong>large-scale datasets containing millions of rows and thousands of features</strong>. The system automates the full machine learning lifecycle—from data ingestion to model selection and hyperparameter tuning—while explicitly incorporating <strong>intelligent data sampling</strong> to reduce computational cost without compromising decision quality.</p>
+        <p>Unlike naïve AutoML pipelines that exhaustively train models on full datasets, this system follows a <strong>progressive evaluation strategy</strong> inspired by <strong>Google AutoML / Vertex AI best practices</strong>, where a statistically representative subset of data is first used to determine the best model family. This approach enables rapid experimentation, cost efficiency, reproducibility, and scalability.</p>
+
+        <h2 id="-2-problem-statement-">2. Problem Statement</h2>
+        <p>Modern organizations generate massive volumes of data, yet most AutoML systems:</p>
+        <ul>
+            <li>Assume full-dataset training</li>
+            <li>Are opaque and difficult to audit</li>
+            <li>Do not scale efficiently on local or constrained infrastructure</li>
+            <li>Offer limited control over preprocessing and model selection logic</li>
+        </ul>
+        <p><strong>Training multiple candidate models on millions of rows is computationally expensive, time-consuming, and unnecessary during early-stage model selection.</strong></p>
+
+        <h3 id="-core-problem-">Core Problem</h3>
+        <blockquote>
+            <p>How can we automatically determine the most suitable machine learning model for very large datasets while minimizing computation, maintaining statistical validity, and ensuring production-readiness?</p>
+        </blockquote>
+
+        <h2 id="-3-proposed-solution-">3. Proposed Solution</h2>
+        <p>This project introduces a <strong>sampling-first AutoML architecture</strong> that:</p>
+        <ol>
+            <li>Accepts large datasets (CSV, DataFrame, API input)</li>
+            <li>Applies <strong>intelligent sampling</strong> (e.g., 5,000 representative rows)</li>
+            <li>Runs a full AutoML pipeline on the sampled data</li>
+            <li>Identifies the best model family and configuration</li>
+            <li>Optionally escalates to full-dataset training for final deployment</li>
+        </ol>
+        <p>This mirrors how large-scale ML systems operate in real industry environments.</p>
+
+        <h2 id="-4-system-architecture-overview-">4. System Architecture Overview</h2>
+        
+        
+
+        <p>The system follows a <strong>layered, modular architecture</strong>:</p>
+        <pre><code><span class="hljs-symbol">User</span> / UI / CLI
+    ↓
+<span class="hljs-symbol">FastAPI</span> <span class="hljs-keyword">Backend </span>(Job-<span class="hljs-keyword">based </span>execution)
+    ↓
+<span class="hljs-symbol">AutoML</span> Orchestrator (run_pipeline)
+    ↓
+<span class="hljs-symbol">Sampling</span>
+→ Preprocessing
+→ Feature <span class="hljs-keyword">Selection
+</span>→ Model Training
+→ Evaluation
+→ Model <span class="hljs-keyword">Selection
+</span>→ Hyperparameter Tuning
+</code></pre>
+        <p>Each layer is isolated, testable, and extensible.</p>
+
+        <h2 id="-5-intelligent-sampling-strategy-key-contribution-">5. Intelligent Sampling Strategy (Key Contribution)</h2>
+        
+        
+
+        <h3 id="-5-1-motivation-">5.1 Motivation</h3>
+        <p>Training all models on full datasets:</p>
+        <ul>
+            <li>Increases runtime exponentially</li>
+            <li>Consumes excessive memory and energy</li>
+            <li>Slows experimentation cycles</li>
+        </ul>
+        <p>Industry research shows that <strong>model ranking stabilizes early</strong>, meaning the best model on a sample is usually the best model on the full dataset.</p>
+
+        <h3 id="-5-2-sampling-design-">5.2 Sampling Design</h3>
+        <p>Sampling is implemented as a <strong>first-class preprocessing step</strong>:</p>
+        <ul>
+            <li>Random sampling for regression tasks</li>
+            <li>Stratified sampling for classification tasks</li>
+            <li>Configurable sample size (default: 5,000 rows)</li>
+            <li>Fixed random seed for reproducibility</li>
+        </ul>
+        <p>Sampling occurs <strong>before preprocessing and feature selection</strong>, ensuring all downstream steps benefit from reduced data volume.</p>
+
+        <h3 id="-5-3-alignment-with-google-automl-standards-">5.3 Alignment with Google AutoML Standards</h3>
+        <p>Google AutoML systems follow a <strong>two-phase approach</strong>:</p>
+        <ol>
+            <li>
+                <strong>Exploration Phase:</strong> Sampled data used to identify optimal model architectures
+            </li>
+            <li>
+                <strong>Exploitation Phase:</strong> Selected models trained on larger or full datasets
+            </li>
+        </ol>
+        <p>This project explicitly implements this philosophy, making it compliant with <strong>large-scale ML operational standards</strong>.</p>
+
+        <h2 id="-6-data-preprocessing-framework-">6. Data Preprocessing Framework</h2>
+        <p>A <strong>dispatcher pattern</strong> routes data to specialized preprocessing modules:</p>
+        <h3 id="-supported-data-types-">Supported Data Types</h3>
+        <ul>
+            <li>Tabular</li>
+            <li>Text</li>
+            <li>Image</li>
+            <li>Time Series</li>
+        </ul>
+        <h3 id="-key-features-">Key Features</h3>
+        <ul>
+            <li>Missing value handling</li>
+            <li>Encoding and scaling</li>
+            <li>Train/validation/test splitting</li>
+            <li>Leakage-safe transformations</li>
+            <li>Artifact tracking (scalers, encoders)</li>
+        </ul>
+        <p>This design ensures consistency and reproducibility across runs.</p>
+
+        <h2 id="-7-feature-selection-module-">7. Feature Selection Module</h2>
+        <p>Feature selection is applied <strong>after preprocessing</strong> and before model training to:</p>
+        <ul>
+            <li>Reduce dimensionality</li>
+            <li>Improve training speed</li>
+            <li>Prevent overfitting</li>
+        </ul>
+        <h3 id="-implemented-methods-">Implemented Methods</h3>
+        <ul>
+            <li>Variance Threshold</li>
+            <li>Recursive Feature Elimination (RFE)</li>
+            <li>Model-based importance (tree models)</li>
+            <li>Combined robust selection strategy</li>
+        </ul>
+        <p>Selected feature indices are applied consistently across all dataset splits.</p>
+
+        <h2 id="-8-model-training-framework-">8. Model Training Framework</h2>
+        <p>Multiple baseline models are trained to avoid algorithmic bias:</p>
+        <h3 id="-classification-">Classification</h3>
+        <ul>
+            <li>Logistic Regression</li>
+            <li>Decision Tree</li>
+            <li>Random Forest</li>
+            <li>Gradient Boosting</li>
+            <li>Support Vector Machine</li>
+            <li>k-Nearest Neighbors</li>
+        </ul>
+        <h3 id="-regression-">Regression</h3>
+        <ul>
+            <li>Linear Regression</li>
+            <li>Ridge / Lasso</li>
+            <li>Random Forest Regressor</li>
+            <li>Gradient Boosting Regressor</li>
+        </ul>
+        <p>Each model is trained under identical conditions for fair comparison.</p>
+
+        <h2 id="-9-evaluation-model-selection-">9. Evaluation &amp; Model Selection</h2>
+        <p>Models are evaluated using task-appropriate metrics:</p>
+        <h3 id="-classification-">Classification</h3>
+        <ul>
+            <li>Accuracy</li>
+            <li>Precision (weighted)</li>
+            <li>Recall (weighted)</li>
+            <li>F1-score (weighted)</li>
+            <li>Confusion matrix</li>
+        </ul>
+        <h3 id="-regression-">Regression</h3>
+        <ul>
+            <li>RMSE</li>
+            <li>R²</li>
+        </ul>
+        <p>The <strong>best model is selected deterministically</strong> using a clear, explainable hierarchy of metrics.</p>
+
+        <h2 id="-10-hyperparameter-tuning-">10. Hyperparameter Tuning</h2>
+        <p>Only the <strong>selected best model</strong> undergoes tuning, preventing unnecessary computation.</p>
+        <h3 id="-supported-methods-">Supported Methods</h3>
+        <ul>
+            <li>Grid Search</li>
+            <li>Random Search</li>
+            <li>Bayesian Search (Optuna-style)</li>
+        </ul>
+        <p>This mirrors industry practice where tuning is applied selectively.</p>
+
+        <h2 id="-11-pipeline-orchestration-">11. Pipeline Orchestration</h2>
+        <p>The <code>run_pipeline()</code> function serves as the <strong>single public API</strong>:</p>
+        <ul>
+            <li>Coordinates all modules</li>
+            <li>Enforces execution order</li>
+            <li>Returns JSON-safe structured results</li>
+            <li>Supports programmatic, CLI, and API usage</li>
+        </ul>
+        <p>This makes the system suitable for automation, deployment, and UI integration.</p>
+
+        <h2 id="-12-backend-ui-integration-">12. Backend &amp; UI Integration</h2>
+        <h3 id="-backend-">Backend</h3>
+        <ul>
+            <li>FastAPI-based job execution</li>
+            <li>Asynchronous runs</li>
+            <li>Status polling via UUID</li>
+            <li>JSON-serializable responses only</li>
+        </ul>
+        <h3 id="-frontend-">Frontend</h3>
+        <ul>
+            <li>React-based UI</li>
+            <li>Step-based wizard</li>
+            <li>Progress monitoring</li>
+            <li>Results visualization</li>
+        </ul>
+        <p>This design follows <strong>modern MLOps and web engineering standards</strong>.</p>
+
+        <h2 id="-13-examples-notebooks-">13. Examples &amp; Notebooks</h2>
+        <h3 id="-examples-folder-">Examples Folder</h3>
+        <ul>
+            <li>Script-based demonstrations</li>
+            <li>Reproducible, minimal runs</li>
+            <li>Suitable for CI/CD and demos</li>
+        </ul>
+        <h3 id="-notebooks-folder-">Notebooks Folder</h3>
+        <ul>
+            <li>Educational exploration</li>
+            <li>Visualization and experimentation</li>
+            <li>Debugging and analysis</li>
+        </ul>
+        <p>This separation reflects <strong>industry best practice</strong>: notebooks for exploration, scripts for production.</p>
+
+        <h2 id="-14-performance-resource-efficiency-">14. Performance &amp; Resource Efficiency</h2>
+        <h3 id="-feature-selection-at-scale-">Feature Selection at Scale</h3>
+        <p>On a local system with 32 GB RAM:</p>
+        <ul>
+            <li>5,000 features processed efficiently</li>
+            <li>Sampling ensures feasible runtime</li>
+            <li>Tree-based methods scale well</li>
+        </ul>
+        <h3 id="-cost-optimization-">Cost Optimization</h3>
+        <ul>
+            <li>Sampling reduces compute by orders of magnitude</li>
+            <li>Hyperparameter tuning applied selectively</li>
+            <li>Avoids wasteful full-dataset experimentation</li>
+        </ul>
+
+        <h2 id="-15-scalability-sustainability-">15. Scalability &amp; Sustainability</h2>
+        <p>The system is designed to scale:</p>
+        <ul>
+            <li>From local machines to cloud environments</li>
+            <li>From thousands to millions of rows</li>
+            <li>From single runs to concurrent jobs</li>
+        </ul>
+        <p>Sampling ensures the system remains usable even as data volume grows.</p>
+
+        <h2 id="-16-industry-standards-compliance-">16. Industry Standards &amp; Compliance</h2>
+        <h3 id="-software-engineering-">Software Engineering</h3>
+        <ul>
+            <li>ISO/IEC 25010 (software quality)</li>
+            <li>Modular, maintainable architecture</li>
+            <li>Clear public vs internal APIs</li>
+        </ul>
+        <h3 id="-machine-learning-engineering-">Machine Learning Engineering</h3>
+        <ul>
+            <li>Leakage prevention</li>
+            <li>Reproducibility</li>
+            <li>Metric-driven decisions</li>
+        </ul>
+        <h3 id="-web-api-standards-">Web &amp; API Standards</h3>
+        <ul>
+            <li>RESTful design</li>
+            <li>JSON serialization</li>
+            <li>Stateless execution</li>
+        </ul>
+
+        <h2 id="-17-risk-analysis-mitigation-">17. Risk Analysis &amp; Mitigation</h2>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Risk</th>
+                        <th>Mitigation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Overfitting</td>
+                        <td>Feature selection + validation</td>
+                    </tr>
+                    <tr>
+                        <td>High compute cost</td>
+                        <td>Sampling-first strategy</td>
+                    </tr>
+                    <tr>
+                        <td>Poor model choice</td>
+                        <td>Multi-model comparison</td>
+                    </tr>
+                    <tr>
+                        <td>Data leakage</td>
+                        <td>Strict pipeline ordering</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h2 id="-18-conclusion-">18. Conclusion</h2>
+        <p>This project delivers a <strong>production-ready AutoML system</strong> that reflects <strong>real-world industrial ML practices</strong> rather than academic prototypes. By incorporating <strong>intelligent sampling</strong>, modular design, and explainable decision logic, the system achieves:</p>
+        <ul>
+            <li>Scalability</li>
+            <li>Efficiency</li>
+            <li>Transparency</li>
+            <li>Reproducibility</li>
+        </ul>
+        <p>The result is an AutoML framework suitable for <strong>enterprise deployment, academic evaluation, and regulatory review</strong>.</p>
+
+        <h2 id="-final-statement-">Final Statement</h2>
+        <blockquote>
+            <p><em>This project demonstrates how large-scale machine learning can be automated responsibly—balancing performance, cost, and engineering rigor—by adopting industry-proven design principles rather than brute-force computation.</em></p>
+        </blockquote>
+
+        <hr>
+        
+        <h1><a href="https://github.com/sajjadgill720/Automated-Machine-Learning-AutoML-Platform">https://github.com/sajjadgill720/Automated-Machine-Learning-AutoML-Platform</a></h1>
+
+        </main>
+</body>
+</html>

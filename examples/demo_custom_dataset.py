@@ -123,17 +123,17 @@ def main(argv=None):
         print()
 
         # Trained models
-        trained_models = results["trained_models"]
+        trained_models = results.get("trained_models") or []
         print(f"Trained Models ({len(trained_models)}):")
-        for name in trained_models.keys():
+        for name in trained_models:
             print(f"  - {name}")
 
         print()
 
         # Best model metrics
-        evaluation_results = results["evaluation_results"]
-        best_model_name = results["best_model"]["name"]
-        best_metrics = evaluation_results[best_model_name].get("metrics", {})
+        evaluation_results = results.get("evaluation_results", {})
+        best_model_name = results.get("best_model_name")
+        best_metrics = evaluation_results.get(best_model_name, {}).get("metrics", {})
 
         print(f"Best Model: {best_model_name}")
         if task_type == "classification":

@@ -1,0 +1,15 @@
+{
+  "feature_names": [
+    "age",
+    "income",
+    "credit_score",
+    "years_employed",
+    "debt",
+    "num_accounts",
+    "num_late_payments"
+  ],
+  "feature_count": 7,
+  "selected_count": null,
+  "data_type": "tabular",
+  "task_type": "classification"
+}

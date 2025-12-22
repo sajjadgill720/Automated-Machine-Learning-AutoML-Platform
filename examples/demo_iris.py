@@ -13,9 +13,9 @@ from automl.pipeline import run_pipeline
 
 
 def main():
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("AutoML Pipeline Demo - Iris Dataset")
-    print("="*70 + "\n")
+    print("=" * 70 + "\n")
 
     # Load Iris dataset and prepare DataFrame
     iris = load_iris(as_frame=True)
@@ -40,9 +40,9 @@ def main():
     )
 
     # Print concise summary
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("SUMMARY")
-    print("="*70 + "\n")
+    print("=" * 70 + "\n")
 
     # Selected features
     selected_features = results.get("selected_features")
@@ -56,9 +56,9 @@ def main():
     print()
 
     # Trained models
-    trained_models = results["trained_models"]
+    trained_models = results.get("trained_models") or []
     print(f"Trained Models ({len(trained_models)}):")
-    for name in trained_models.keys():
+    for name in trained_models:
         print(f"  - {name}")
 
     print()
@@ -78,8 +78,8 @@ def main():
     print()
 
     # Best model
-    best_model_name = results["best_model"]["name"]
-    best_metrics = evaluation_results[best_model_name].get("metrics", {})
+    best_model_name = results.get("best_model_name")
+    best_metrics = evaluation_results.get(best_model_name, {}).get("metrics", {})
     print(f"Best Model: {best_model_name}")
     for metric_name, metric_value in best_metrics.items():
         if isinstance(metric_value, float):
@@ -92,15 +92,17 @@ def main():
     # Tuned model (if applied)
     tuned_model = results.get("tuned_model")
     if tuned_model:
-        print(f"Tuned Model Parameters:")
+        print("Tuned Model Parameters:")
         print(f"  Best params: {tuned_model.get('best_params')}")
-        print(f"  Best CV score (accuracy): {tuned_model.get('best_score'):.4f}")
+        best_score = tuned_model.get("best_score")
+        if best_score is not None:
+            print(f"  Best CV score (accuracy): {best_score:.4f}")
     else:
         print("Tuned Model: Not applied")
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("Demo Complete")
-    print("="*70 + "\n")
+    print("=" * 70 + "\n")
 
 
 if __name__ == "__main__":

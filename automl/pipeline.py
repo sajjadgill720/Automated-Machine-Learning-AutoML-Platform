@@ -1,7 +1,8 @@
 """AutoML Pipeline orchestrator for tabular, text, image, and time-series datasets.
 
 Integrates preprocessing, optional feature selection, model training, evaluation,
-model selection, optional hyperparameter tuning, and returns structured results.
+model selection, optional hyperparameter tuning, and persists artifacts following
+industry standards. Returns only JSON-safe metadata and file paths.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from typing import Any, Dict, Optional
 import pandas as pd
 import numpy as np
 import joblib
+import logging
 from pathlib import Path
 
 from .preprocessing import preprocess_data
@@ -18,6 +20,14 @@ from .model_trainer import train_models
 from .evaluator import evaluate_models
 from .model_selector import select_best_model
 from .hyperparameter_tuner import tune_hyperparameters
+from .utils.artifact_manager import save_artifacts, generate_run_id
+
+# Configure logging
+logging.basicConfig(
+	level=logging.INFO,
+	format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 def run_pipeline(
@@ -31,8 +41,21 @@ def run_pipeline(
 	hyperparameter_params: Optional[Dict[str, Any]] = None,
 	job_id: Optional[str] = None,
 	model_output_dir: Optional[Path] = None,
+	artifacts_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
-	"""Run the end-to-end AutoML pipeline.
+	"""Run the end-to-end AutoML pipeline with artifact persistence.
+
+	Orchestrates the full ML workflow:
+	1. Data preprocessing (scaling, encoding, vectorization)
+	2. Optional feature selection
+	3. Baseline model training
+	4. Model evaluation
+	5. Best model selection
+	6. Optional hyperparameter tuning
+	7. Artifact persistence (model, preprocessors, metadata)
+
+	Returns only JSON-safe metadata and file paths. Model objects are
+	persisted to disk using joblib following industry standards.
 
 	Parameters
 	----------
@@ -42,9 +65,9 @@ def run_pipeline(
 		Column name of target variable for supervised tasks.
 	task_type : str
 		"classification" or "regression".
-	feature_selection_enabled : bool
+	feature_selection_enabled : bool, default=True
 		Whether to perform feature selection (tabular/text only).
-	hyperparameter_tuning_enabled : bool
+	hyperparameter_tuning_enabled : bool, default=True
 		Whether to tune the selected model after baseline selection.
 	preprocessing_params : Optional[Dict[str, Any]]
 		Options for preprocessing (scaling, encoding, missing value handling, etc.).
@@ -52,12 +75,60 @@ def run_pipeline(
 		Options for model selection (e.g., subset of models to train).
 	hyperparameter_params : Optional[Dict[str, Any]]
 		Tuning options such as search_method and param_grid.
+	job_id : Optional[str]
+		Job identifier for tracking. If None, pipeline still runs but artifacts
+		are saved to a timestamp-based run_id.
+	model_output_dir : Optional[Path]
+		DEPRECATED: Use artifacts_dir instead. Kept for backward compatibility.
+	artifacts_dir : Optional[Path]
+		Directory to save artifacts. Defaults to 'artifacts/'.
 
 	Returns
 	-------
 	Dict[str, Any]
-		Structured output containing trained_models, evaluation_results, best_model,
-		tuned_model, and selected_features when applicable.
+		Structured return containing ONLY JSON-safe data:
+		{
+			"run_id": str,
+			"model_type": str,
+			"model_path": str,
+			"artifacts_path": str,
+			"preprocessing_path": str,
+			"metrics": dict,
+			"task_type": str,
+			"data_type": str,
+			"feature_count": int,
+			"selected_feature_count": int or None,
+			"confusion_matrix": dict or None,
+			"feature_importance": list or None,
+			"best_model_name": str,
+			"trained_models": list,
+			"evaluation_results": dict,
+			"tuned_model": dict or None,
+			"selected_features": list or None,
+		}
+
+		NO sklearn/TensorFlow objects are included in the return payload.
+		All model objects are saved to disk and referenced by path only.
+
+	Examples
+	--------
+	>>> from automl.pipeline import run_pipeline
+	>>> import pandas as pd
+	>>>
+	>>> df = pd.read_csv('data.csv')
+	>>> result = run_pipeline(
+	...     dataset=df,
+	...     target_column='label',
+	...     task_type='classification',
+	...     feature_selection_enabled=True,
+	...     hyperparameter_tuning_enabled=True,
+	... )
+	>>>
+	>>> # Access trained model later
+	>>> from automl.utils.artifact_manager import load_artifacts
+	>>> artifacts = load_artifacts(result['run_id'])
+	>>> model = artifacts['model']
+	>>> predictions = model.predict(X_new)
 	"""
 
 	print("==== AutoML Pipeline: Start ====")
@@ -65,6 +136,16 @@ def run_pipeline(
 	preprocessing_params = preprocessing_params or {}
 	model_training_params = model_training_params or {}
 	hyperparameter_params = hyperparameter_params or {}
+
+	# Use provided artifacts_dir or fall back to model_output_dir (for backward compat)
+	final_artifacts_dir = artifacts_dir
+	if final_artifacts_dir is None and model_output_dir:
+		# Backward compatibility: model_output_dir contains job_id subdirectory
+		final_artifacts_dir = model_output_dir.parent
+
+	# Generate unique run_id
+	run_id = generate_run_id()
+	logger.info(f"Generated run_id: {run_id}")
 
 	# 1) Detect data type
 	data_type = _detect_data_type(dataset)
@@ -86,7 +167,18 @@ def run_pipeline(
 	y_test = data_splits.get("y_test")
 	feature_names = data_splits.get("feature_names")
 
+	# Collect preprocessing artifacts for persistence
+	preprocessors = {}
+	if "scaler" in data_splits:
+		preprocessors["scaler"] = data_splits["scaler"]
+	if "encoders" in data_splits:
+		preprocessors["encoders"] = data_splits["encoders"]
+	if "vectorizer" in data_splits:
+		preprocessors["vectorizer"] = data_splits["vectorizer"]
+
 	selected_features = None
+	selected_indices = None
+	original_feature_count = len(feature_names) if feature_names else 0
 
 	# 4) Optional feature selection for tabular/text
 	if feature_selection_enabled and data_type in {"tabular", "text"}:
@@ -102,6 +194,10 @@ def run_pipeline(
 				X_val = X_val[:, selected_indices]
 				data_splits["X_val"] = X_val
 			X_test = X_test[:, selected_indices]
+			# Store selected indices for persistence
+			preprocessors["selected_indices"] = selected_indices
+			if selected_features:
+				preprocessors["selected_features"] = selected_features
 
 	# 5) Train multiple baseline models
 	print("Training baseline models...")
@@ -118,6 +214,7 @@ def run_pipeline(
 	best_model_object = selection["best_model_object"]
 
 	tuned_model_result = None
+	final_model = best_model_object
 
 	# 8) Optional hyperparameter tuning
 	if hyperparameter_tuning_enabled:
@@ -125,6 +222,9 @@ def run_pipeline(
 		search_method = hyperparameter_params.get("search_method", "grid")
 		param_grid = hyperparameter_params.get("param_grid")
 		tuned_model_result = tune_hyperparameters(best_model_object, X_train, y_train, task_type, search_method=search_method, param_grid=param_grid)
+		if tuned_model_result and "tuned_model" in tuned_model_result:
+			final_model = tuned_model_result["tuned_model"]
+			logger.info(f"Using tuned model for persistence")
 
 	print("==== AutoML Pipeline: Done ====")
 
@@ -143,40 +243,92 @@ def run_pipeline(
 
 	# Extract feature importance if available
 	feature_importance_data = None
-	if hasattr(best_model_object, "feature_importances_"):
-		importances = best_model_object.feature_importances_
-		if feature_names and len(feature_names) == len(importances):
-			indices = np.argsort(importances)[::-1]
-			feature_importance_data = [
-				{"feature": feature_names[i], "importance": float(importances[i])}
-				for i in indices
-			]
-		elif selected_features and len(selected_features) == len(importances):
+	if hasattr(final_model, "feature_importances_"):
+		importances = final_model.feature_importances_
+		if selected_features and len(selected_features) == len(importances):
 			indices = np.argsort(importances)[::-1]
 			feature_importance_data = [
 				{"feature": selected_features[i], "importance": float(importances[i])}
 				for i in indices
 			]
+		elif feature_names and len(feature_names) == len(importances):
+			indices = np.argsort(importances)[::-1]
+			feature_importance_data = [
+				{"feature": feature_names[i], "importance": float(importances[i])}
+				for i in indices
+			]
 
-	# Save best model artifact if output directory provided
-	model_artifact_path = None
+	# Prepare metrics for persistence
+	best_metrics = evaluation_results.get(best_model_name, {}).get("metrics", {})
+	
+	# Ensure all metrics are JSON-serializable (convert numpy types)
+	metrics_json = {}
+	for key, value in best_metrics.items():
+		if isinstance(value, (np.integer, np.floating)):
+			metrics_json[key] = float(value)
+		else:
+			metrics_json[key] = value
+
+	# Prepare feature metadata
+	feature_metadata = {
+		"feature_names": feature_names,
+		"feature_count": original_feature_count,
+		"selected_count": len(selected_features) if selected_features else None,
+		"data_type": data_type,
+		"task_type": task_type,
+	}
+
+	# Save artifacts using artifact manager
+	artifact_paths = save_artifacts(
+		run_id=run_id,
+		model=final_model,
+		preprocessors=preprocessors,
+		metrics=metrics_json,
+		feature_metadata=feature_metadata,
+		base_dir=final_artifacts_dir,
+	)
+
+	logger.info("Artifacts saved successfully")
+
+	# Legacy support: also save to model_output_dir if provided
 	if model_output_dir and job_id:
 		model_output_dir.mkdir(parents=True, exist_ok=True)
 		model_path = model_output_dir / "best_model.pkl"
-		# Use protocol=4 for better compatibility across Python versions (3.4+)
-		joblib.dump(best_model_object, model_path, protocol=4)
-		model_artifact_path = str(model_path)
-		print(f"Saved model artifact to: {model_artifact_path}")
+		joblib.dump(final_model, model_path, protocol=4)
+		logger.info(f"Legacy model artifact saved to: {model_path}")
+
+	# Serialize tuned_model result (strip model object, keep params only)
+	tuned_serialized = None
+	if tuned_model_result:
+		tuned_serialized = {
+			"model_name": best_model_name,
+			"best_params": tuned_model_result.get("best_params"),
+			"best_score": tuned_model_result.get("best_score"),
+		}
 
 	return {
-		"trained_models": trained_models,
-		"evaluation_results": evaluation_results,
-		"best_model": {"name": best_model_name, "object": best_model_object},
-		"tuned_model": tuned_model_result,
-		"selected_features": selected_features,
+		"run_id": run_id,
+		"model_type": type(final_model).__name__,
+		"model_path": artifact_paths["model_path"],
+		"artifacts_path": artifact_paths["artifacts_dir"],
+		"preprocessing_path": artifact_paths["preprocessing_path"],
+		"metrics": metrics_json,
+		"task_type": task_type,
+		"data_type": data_type,
+		"feature_count": original_feature_count,
+		"selected_feature_count": len(selected_features) if selected_features else None,
 		"confusion_matrix": confusion_matrix_data,
 		"feature_importance": feature_importance_data,
-		"model_artifact_path": model_artifact_path,
+		"best_model_name": best_model_name,
+		"trained_models": list(trained_models.keys()),
+		"evaluation_results": {
+			model_name: {
+				"metrics": eval_data.get("metrics", {}),
+			}
+			for model_name, eval_data in evaluation_results.items()
+		},
+		"tuned_model": tuned_serialized,
+		"selected_features": selected_features,
 	}
 
 

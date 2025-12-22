@@ -250,9 +250,12 @@ def _run_pipeline_job(job_id: str, request_data: Dict[str, Any]) -> None:
             "request": request_data,
         })
 
-        # Create job output directory
+        # Create job output directory (for backward compatibility)
         job_output_dir = RESULTS_DIR / job_id
         job_output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Use artifacts directory for persistent model storage
+        artifacts_dir = Path("artifacts")
 
         results = run_pipeline(
             dataset=df,
@@ -264,37 +267,40 @@ def _run_pipeline_job(job_id: str, request_data: Dict[str, Any]) -> None:
             hyperparameter_params=hyperparameter_params,
             job_id=job_id,
             model_output_dir=job_output_dir,
+            artifacts_dir=artifacts_dir,
         )
 
-        best_model_name = results["best_model"]["name"]
-        evaluation_results = results["evaluation_results"]
-        best_metrics = evaluation_results[best_model_name].get("metrics", {})
-        tuned_serialized = _sanitize_tuned_model(results.get("tuned_model"))
-        selected_features = _safe_list(results.get("selected_features"))
+        # Extract data from new return structure (JSON-safe)
+        run_id = results.get("run_id")
+        best_model_name = results.get("best_model_name")
+        best_metrics = results.get("metrics", {})
+        trained_models_list = results.get("trained_models", [])
+        selected_features = results.get("selected_features")
+        evaluation_results = results.get("evaluation_results", {})
+        tuned_result = results.get("tuned_model")
         
-        # Convert evaluation_results for JSON serialization
-        serialized_eval_results = {}
-        for model_name, eval_data in evaluation_results.items():
-            serialized_eval_results[model_name] = {
-                "metrics": eval_data.get("metrics", {}),
-                # Skip confusion_matrix in evaluation_results (already in main results)
-            }
-
+        # Construct result payload with artifact paths
         result_payload = {
             "status": "completed",
             "stage": "completed",
             "progress": 100,
             "request": request_data,
             "results": {
+                "run_id": run_id,
                 "best_model": best_model_name,
                 "metrics": best_metrics,
                 "selected_features": selected_features,
-                "trained_models": list(results["trained_models"].keys()),
-                "tuned_model": tuned_serialized,
+                "trained_models": trained_models_list,
+                "tuned_model": tuned_result,
                 "confusion_matrix": results.get("confusion_matrix"),
                 "feature_importance": results.get("feature_importance"),
-                "evaluation_results": serialized_eval_results,
-                "model_artifact_path": results.get("model_artifact_path"),
+                "evaluation_results": evaluation_results,
+                "model_path": results.get("model_path"),
+                "artifacts_path": results.get("artifacts_path"),
+                "preprocessing_path": results.get("preprocessing_path"),
+                "data_type": results.get("data_type"),
+                "feature_count": results.get("feature_count"),
+                "selected_feature_count": results.get("selected_feature_count"),
             },
         }
 
@@ -445,27 +451,57 @@ def export_csv(job_id: str):
 
 @app.get("/api/export/{job_id}/model")
 def export_model(job_id: str):
-    """Download trained model artifact."""
+    """Download trained model artifact.
+    
+    First attempts to load from new artifacts structure (run_id),
+    then falls back to legacy location for backward compatibility.
+    """
+    result_path = RESULTS_DIR / f"{job_id}.json"
+    
+    if not result_path.exists():
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    with open(result_path, "r") as f:
+        data = json.load(f)
+    
+    results = data.get("results", {})
+    
+    # Try new artifacts structure first
+    model_path_str = results.get("model_path")
+    if model_path_str:
+        model_path = Path(model_path_str)
+        if model_path.exists():
+            def iter_file():
+                with open(model_path, "rb") as f:
+                    yield from f
+            
+            return StreamingResponse(
+                iter_file(),
+                media_type="application/octet-stream",
+                headers={"Content-Disposition": f"attachment; filename=automl-model-{job_id}.pkl"}
+            )
+    
+    # Fall back to legacy location
     job_dir = RESULTS_DIR / job_id
-    model_path = job_dir / "best_model.pkl"
+    legacy_model_path = job_dir / "best_model.pkl"
     
-    if not model_path.exists():
-        raise HTTPException(status_code=404, detail="Model artifact not found")
+    if legacy_model_path.exists():
+        def iter_file():
+            with open(legacy_model_path, "rb") as f:
+                yield from f
+        
+        return StreamingResponse(
+            iter_file(),
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f"attachment; filename=automl-model-{job_id}.pkl"}
+        )
     
-    def iter_file():
-        with open(model_path, "rb") as f:
-            yield from f
-    
-    return StreamingResponse(
-        iter_file(),
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f"attachment; filename=automl-model-{job_id}.pkl"}
-    )
+    raise HTTPException(status_code=404, detail="Model artifact not found")
 
 
 @app.get("/api/export/{job_id}/report")
 def export_report(job_id: str):
-    """Generate and download a PDF report (stub for now)."""
+    """Generate and download a text report with artifact information."""
     result_path = RESULTS_DIR / f"{job_id}.json"
     if not result_path.exists():
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
@@ -473,10 +509,13 @@ def export_report(job_id: str):
     with open(result_path, "r") as f:
         data = json.load(f)
     
-    # For now, return a simple text report; replace with PDF generation
+    results = data.get("results", {})
+    
+    # Generate report with artifact information
     report_content = f"""AutoML Report
 ================
 Job ID: {job_id}
+Run ID: {results.get('run_id', 'N/A')}
 Timestamp: {data.get('timestamp', 'N/A')}
 
 Configuration:
@@ -484,13 +523,34 @@ Configuration:
 Dataset: {data.get('request', {}).get('filename', 'N/A')}
 Task Type: {data.get('request', {}).get('task_type', 'N/A')}
 Target Column: {data.get('request', {}).get('target_column', 'N/A')}
+Data Type: {results.get('data_type', 'N/A')}
+Feature Selection: {data.get('request', {}).get('feature_selection_enabled', False)}
+Hyperparameter Tuning: {data.get('request', {}).get('hyperparameter_tuning_enabled', False)}
+
+Artifacts:
+----------
+Model Path: {results.get('model_path', 'N/A')}
+Artifacts Directory: {results.get('artifacts_path', 'N/A')}
+Preprocessing Artifacts: {results.get('preprocessing_path', 'N/A')}
+
+Feature Information:
+--------------------
+Total Features: {results.get('feature_count', 'N/A')}
+Selected Features: {results.get('selected_feature_count', 'N/A')}
+Selected Feature Names: {', '.join(results.get('selected_features', [])[:10])}{'...' if len(results.get('selected_features', [])) > 10 else ''}
 
 Results:
 --------
-Best Model: {data.get('results', {}).get('best_model', 'N/A')}
-Metrics: {json.dumps(data.get('results', {}).get('metrics', {}), indent=2)}
+Best Model: {results.get('best_model', 'N/A')}
+Trained Models: {', '.join(results.get('trained_models', []))}
+Metrics: {json.dumps(results.get('metrics', {}), indent=2)}
 
-This is a simplified report. Full PDF generation coming soon.
+Tuned Model:
+{json.dumps(results.get('tuned_model', {}), indent=2) if results.get('tuned_model') else 'Not applied'}
+
+This report contains references to persisted model artifacts following industry standards.
+All model objects and preprocessing transformers are stored on disk using joblib.
+Load artifacts with: from automl.utils.artifact_manager import load_artifacts
 """
     
     return Response(
@@ -498,6 +558,36 @@ This is a simplified report. Full PDF generation coming soon.
         media_type="text/plain",
         headers={"Content-Disposition": f"attachment; filename=automl-report-{job_id}.txt"}
     )
+
+
+@app.get("/api/artifacts/{job_id}/info")
+def get_artifacts_info(job_id: str):
+    """Get information about saved artifacts for a job."""
+    result_path = RESULTS_DIR / f"{job_id}.json"
+    if not result_path.exists():
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+    
+    with open(result_path, "r") as f:
+        data = json.load(f)
+    
+    results = data.get("results", {})
+    
+    # Verify artifact files actually exist
+    artifacts_info = {
+        "run_id": results.get("run_id"),
+        "artifacts_path": results.get("artifacts_path"),
+        "model_path": results.get("model_path"),
+        "preprocessing_path": results.get("preprocessing_path"),
+    }
+    
+    # Check if files exist
+    for key in ["model_path", "preprocessing_path"]:
+        path_str = results.get(key)
+        if path_str:
+            exists = Path(path_str).exists()
+            artifacts_info[f"{key}_exists"] = exists
+    
+    return artifacts_info
 
 
 if __name__ == "__main__":

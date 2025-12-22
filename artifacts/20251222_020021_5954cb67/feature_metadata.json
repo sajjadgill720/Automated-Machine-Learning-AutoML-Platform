@@ -1,0 +1,12 @@
+{
+  "feature_names": [
+    "sepal length (cm)",
+    "sepal width (cm)",
+    "petal length (cm)",
+    "petal width (cm)"
+  ],
+  "feature_count": 4,
+  "selected_count": null,
+  "data_type": "tabular",
+  "task_type": "classification"
+}
